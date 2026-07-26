@@ -1,0 +1,2310 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>Score Tracker</title>
+  <script src="https://cdn.tailwindcss.com" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js" defer></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; }
+
+    /* 不依赖 Tailwind 的 hidden，防止 CDN 延迟/失败时模态框闪烁 */
+    .hidden { display: none !important; }
+
+    :root {
+      --bg: #12121f;
+      --surface: rgba(255,255,255,0.07);
+      --surface-2: rgba(255,255,255,0.08);
+      --surface-3: rgba(255,255,255,0.03);
+      --surface-hover: rgba(255,255,255,0.1);
+      --border: rgba(255,255,255,0.13);
+      --border-hover: rgba(255,255,255,0.18);
+      --text: #e8eaf0;
+      --text-dim: rgba(255,255,255,0.55);
+      --text-muted: rgba(255,255,255,0.45);
+      --text-label: rgba(255,255,255,0.65);
+      --placeholder: rgba(255,255,255,0.35);
+      --accent: #818cf8;
+      --accent-2: #a5b4fc;
+      --accent-dim: rgba(129,140,248,0.18);
+      --accent-border: rgba(129,140,248,0.3);
+      --accent-border-strong: rgba(129,140,248,0.5);
+      --accent-bg: rgba(129,140,248,0.07);
+      --accent-text: #c4b5fd;
+      --score-color: #22d3ee;
+      --danger: #f87171;
+      --radius: 14px;
+      --panel-bg: rgba(22,22,38,0.97);
+      --panel-bg-2: rgba(16,16,30,0.97);
+      --header-bg: rgba(18,18,32,0.95);
+      --overlay-bg: rgba(0,0,0,0.55);
+      --scrollbar: rgba(255,255,255,0.08);
+      --scrollbar-hover: rgba(255,255,255,0.14);
+      --app-name: #e2e8f0;
+      --shadow-lg: 0 32px 80px rgba(0,0,0,0.6);
+      --shadow-md: 0 24px 64px rgba(0,0,0,0.55);
+      --shadow-sm: 0 12px 32px rgba(0,0,0,0.5);
+      --inset-highlight: inset 0 1px 0 rgba(255,255,255,0.08);
+      --pattern-opacity: 0.03;
+      --glow-opacity: 0.08;
+      color-scheme: dark;
+    }
+
+    /* ===== 亮色模式变量覆盖 ===== */
+    html.light-mode {
+      --bg: #f0f2f5;
+      --surface: rgba(255,255,255,0.75);
+      --surface-2: rgba(0,0,0,0.05);
+      --surface-3: rgba(0,0,0,0.03);
+      --surface-hover: rgba(0,0,0,0.08);
+      --border: rgba(0,0,0,0.10);
+      --border-hover: rgba(0,0,0,0.15);
+      --text: #1e1e2e;
+      --text-dim: rgba(30,30,46,0.55);
+      --text-muted: rgba(30,30,46,0.42);
+      --text-label: rgba(30,30,46,0.65);
+      --placeholder: rgba(30,30,46,0.35);
+      --accent: #6366f1;
+      --accent-2: #4f46e5;
+      --accent-dim: rgba(99,102,241,0.18);
+      --accent-border: rgba(99,102,241,0.3);
+      --accent-border-strong: rgba(99,102,241,0.5);
+      --accent-bg: rgba(99,102,241,0.07);
+      --accent-text: #6366f1;
+      --score-color: #6366f1;
+      --danger: #dc2626;
+      --panel-bg: rgba(255,255,255,0.97);
+      --panel-bg-2: rgba(255,255,255,0.97);
+      --header-bg: rgba(240,242,245,0.95);
+      --overlay-bg: rgba(0,0,0,0.4);
+      --scrollbar: rgba(0,0,0,0.08);
+      --scrollbar-hover: rgba(0,0,0,0.14);
+      --app-name: #1e1e2e;
+      --shadow-lg: 0 32px 80px rgba(0,0,0,0.12);
+      --shadow-md: 0 24px 64px rgba(0,0,0,0.15);
+      --shadow-sm: 0 12px 32px rgba(0,0,0,0.12);
+      --inset-highlight: inset 0 1px 0 rgba(255,255,255,0.6);
+      --pattern-opacity: 0.02;
+      --glow-opacity: 0.05;
+      color-scheme: light;
+    }
+
+    html, body {
+      height: 100%;
+      overflow: hidden;
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+      -webkit-font-smoothing: antialiased;
+      user-select: none;
+    }
+
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      opacity: var(--pattern-opacity);
+      z-index: 0;
+      pointer-events: none;
+      background-image:
+        radial-gradient(circle at 20% 30%, #6366f1 0px, transparent 1px),
+        radial-gradient(circle at 80% 70%, #8b5cf6 0px, transparent 1px),
+        radial-gradient(circle at 50% 50%, #22d3ee 0px, transparent 1px);
+      background-size: 60px 60px, 80px 80px, 100px 100px;
+      background-position: 0 0, 20px 15px, 40px 30px;
+    }
+
+    .glow {
+      position: fixed;
+      border-radius: 50%;
+      filter: blur(120px);
+      opacity: var(--glow-opacity);
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      position: relative;
+      overflow: hidden;
+    }
+    .card::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      border-radius: inherit;
+      pointer-events: none;
+      box-shadow: var(--inset-highlight);
+    }
+
+    .btn-primary {
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: 10px;
+      padding: 8px 20px;
+      font-size: 13px;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+      cursor: pointer;
+      transition: transform .12s, box-shadow .2s;
+      white-space: nowrap;
+      box-shadow: 0 2px 8px rgba(129,140,248,0.2);
+      position: relative;
+      overflow: hidden;
+    }
+    .btn-primary::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(180deg, rgba(255,255,255,0.08) 0%, transparent 50%);
+      pointer-events: none;
+    }
+    .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 4px 16px rgba(129,140,248,0.35); }
+    .btn-primary:active { transform: translateY(0); }
+    .btn-primary:disabled { opacity: .4; cursor: not-allowed; transform: none; box-shadow: none; }
+
+    .btn-ghost {
+      background: var(--surface-2);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 8px 20px;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background .15s, border-color .15s;
+      font-family: inherit;
+    }
+    .btn-ghost:hover { background: var(--surface-hover); border-color: var(--border-hover); }
+
+    .btn-danger {
+      background: rgba(248,113,113,0.9);
+      color: #fff;
+      border: none;
+      border-radius: 10px;
+      padding: 8px 20px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: transform .12s, box-shadow .2s;
+      box-shadow: 0 2px 8px rgba(248,113,113,0.2);
+      font-family: inherit;
+    }
+    .btn-danger:hover { transform: translateY(-1px); box-shadow: 0 4px 14px rgba(248,113,113,0.35); }
+
+    .btn-subtle {
+      background: none;
+      border: none;
+      color: var(--placeholder);
+      cursor: pointer;
+      font-size: 12px;
+      padding: 2px 6px;
+      transition: color .15s;
+      font-weight: 500;
+      font-family: inherit;
+    }
+    .btn-subtle:hover { color: var(--text); }
+
+    .input-field {
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      color: var(--text);
+      padding: 9px 13px;
+      font-size: 14px;
+      width: 100%;
+      outline: none;
+      transition: border-color .2s, box-shadow .2s;
+      font-family: inherit;
+    }
+    .input-field:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px var(--accent-dim);
+    }
+    .input-field::placeholder { color: var(--placeholder); }
+
+    ::-webkit-scrollbar { width: 5px; height: 5px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--scrollbar); border-radius: 10px; }
+    ::-webkit-scrollbar-thumb:hover { background: var(--scrollbar-hover); }
+
+    /* ===== 登录页 ===== */
+    #loginPage {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 500;
+    }
+
+    /* FOUC 防护：appPage 默认隐藏；
+       有有效 session 时 head 内同步脚本会给 <html> 加 .app-ready，
+       此时初始即显示主应用、隐藏登录页，避免登录页闪烁。 */
+    #appPage { display: none; }
+    html.app-ready #loginPage { display: none; }
+    html.app-ready #appPage { display: flex; flex-direction: column; height: 100vh; height: 100dvh; }
+
+    .login-card {
+      background: var(--panel-bg);
+      backdrop-filter: blur(24px);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 40px 36px 36px;
+      width: 92%;
+      max-width: 380px;
+      box-shadow: var(--shadow-lg), var(--inset-highlight);
+      animation: fadeUp .35s ease-out;
+    }
+
+    /* ===== 主应用 ===== */
+    .app-header {
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      padding: 0 24px;
+      height: 56px;
+      border-bottom: 1px solid var(--border);
+      background: var(--header-bg);
+      backdrop-filter: blur(16px);
+      z-index: 100;
+    }
+
+    .header-actions {
+      margin-left: auto;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .header-controls {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-left: 16px;
+      flex-shrink: 0;
+    }
+
+    .main-scroll { flex: 1; overflow-y: auto; padding: 20px 20px 28px; }
+    .main-grid {
+      display: grid;
+      grid-template-columns: 4fr 6fr;
+      gap: 16px;
+      max-width: 1360px;
+      margin: 0 auto;
+    }
+    .main-grid .full { grid-column: 1 / -1; }
+
+    @media (max-width: 1024px) {
+      .main-grid { gap: 12px; }
+      .main-scroll { padding: 16px 16px 24px; }
+    }
+
+    @media (max-width: 860px) {
+      .main-grid { grid-template-columns: 1fr; }
+      .main-grid .full { grid-column: 1; }
+      html, body { overflow: auto; }
+      #appPage { height: auto; min-height: 100vh; min-height: 100dvh; }
+      .main-scroll { overflow: visible; }
+    }
+
+    @media (max-width: 768px) {
+      /* Header wraps: row 1 = logo+title+icons, row 2 = action buttons */
+      .app-header {
+        flex-wrap: wrap;
+        height: auto;
+        padding: 8px 12px;
+        gap: 6px;
+      }
+      .app-header h1 { font-size: 14px; margin-left: 8px; }
+      .header-actions {
+        order: 3;
+        width: 100%;
+        margin-left: 0;
+      }
+      .header-actions .btn-primary,
+      .header-actions .btn-ghost {
+        flex: 1;
+        font-size: 12px;
+        padding: 7px 8px;
+      }
+      .header-controls { margin-left: auto; gap: 8px; }
+      .main-scroll { padding: 12px 12px 20px; }
+      .main-grid { gap: 10px; }
+      /* Modals: full screen on mobile */
+      .modal-card {
+        width: 100% !important;
+        max-width: 100% !important;
+        border-radius: 0 !important;
+        max-height: 100vh;
+        max-height: 100dvh;
+        padding: 20px 16px 18px;
+      }
+      /* Stack form grids */
+      .modal-card div[style*="grid-template-columns:1fr 1fr"] {
+        grid-template-columns: 1fr !important;
+      }
+      /* Reduce chart min-height */
+      [style*="min-height:260px"] {
+        min-height: 200px !important;
+      }
+    }
+
+    @media (max-width: 480px) {
+      .app-header h1 { display: none; }
+      .main-scroll { padding: 8px 8px 16px; }
+      .header-actions { gap: 6px; }
+      .header-actions .btn-primary,
+      .header-actions .btn-ghost { font-size: 11px; padding: 6px 6px; }
+      [style*="min-height:260px"] {
+        min-height: 180px !important;
+      }
+    }
+
+    .modal-overlay {
+      position: fixed; inset: 0;
+      background: var(--overlay-bg);
+      backdrop-filter: blur(6px);
+      z-index: 1000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .modal-card {
+      background: var(--panel-bg);
+      backdrop-filter: blur(20px);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 28px 26px 24px;
+      width: 92%;
+      max-width: 480px;
+      max-height: 88vh;
+      overflow-y: auto;
+      box-shadow: var(--shadow-md), 0 0 0 1px var(--border) inset;
+    }
+
+    .confirm-box {
+      background: var(--panel-bg);
+      border: 1px solid var(--accent-border);
+      border-radius: 16px;
+      padding: 22px 24px;
+      max-width: 340px;
+      width: 90%;
+      box-shadow: var(--shadow-md);
+    }
+
+    .chart-placeholder {
+      position: absolute; inset: 0;
+      display: flex; align-items: center; justify-content: center;
+      color: var(--text-dim);
+      font-size: 12px; text-align: center; pointer-events: none;
+      padding: 16px; line-height: 1.7;
+    }
+
+    .fade-in { animation: fadeUp .3s ease-out; }
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .label { font-size: 11px; font-weight: 600; color: var(--text-label); letter-spacing: 0.04em; text-transform: uppercase; }
+    .section-title { font-size: 13px; font-weight: 600; color: var(--accent-text); letter-spacing: 0.03em; }
+    .err-msg { color: var(--danger); font-size: 11px; margin-top: 4px; font-weight: 500; }
+
+    #validationBar {
+      flex-shrink: 0;
+      padding: 5px 20px;
+      background: rgba(248,113,113,0.07);
+      color: var(--danger);
+      font-size: 11px;
+      font-weight: 500;
+    }
+
+    .logo-mark {
+      width: 30px; height: 30px;
+      border-radius: 8px;
+      background: linear-gradient(135deg, #818cf8, #a78bfa);
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+      box-shadow: 0 0 20px rgba(129,140,248,0.25);
+    }
+    .logo-mark::after {
+      content: '';
+      width: 8px; height: 8px;
+      border-radius: 3px;
+      background: #fff;
+      opacity: 0.9;
+    }
+
+    /* 用户标签 */
+    .user-chip {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      background: var(--surface-3);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 4px 12px 4px 8px;
+      font-size: 12px;
+      color: var(--text-dim);
+    }
+    .user-chip .avatar {
+      width: 22px; height: 22px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #818cf8, #a78bfa);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 10px;
+      font-weight: 700;
+      color: #fff;
+      flex-shrink: 0;
+    }
+  </style>
+  <script>
+    // FOUC 防护：在 body 渲染前同步检查 session。
+    // 若有有效登录态（sai_session 存在且对应账号仍存在），
+    // 立即给 <html> 标记 .app-ready，配合 CSS 让主应用初始可见、登录页初始隐藏。
+    // 判定条件与 init() 完全一致，确保行为统一。
+    (function () {
+      try {
+        var s = localStorage.getItem('sai_session');
+        if (s && localStorage.getItem('sai_auth_' + s) !== null) {
+          document.documentElement.classList.add('app-ready');
+        }
+        // 主题 FOUC 防护：在 body 渲染前同步应用主题 class，防止亮色模式闪烁
+        var savedTheme = localStorage.getItem('sai_theme') || 'dark';
+        if (savedTheme === 'light') {
+          document.documentElement.classList.add('light-mode');
+        }
+      } catch (e) { /* localStorage 不可用时退回默认（显示登录页） */ }
+    })();
+  </script>
+</head>
+<body>
+  <div class="glow" style="width:460px;height:460px;background:#6366f1;top:-150px;left:-80px;"></div>
+  <div class="glow" style="width:360px;height:360px;background:#8b5cf6;bottom:-100px;right:-40px;"></div>
+
+  <!-- ===== 登录页 ===== -->
+  <div id="loginPage">
+    <div class="login-card">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:28px;">
+        <div class="logo-mark"></div>
+        <div>
+          <div data-i18n="app_name" style="font-size:17px;font-weight:700;letter-spacing:-0.02em;color:var(--app-name);">Score Tracker</div>
+          <div data-i18n="app_subtitle" style="font-size:11px;color:var(--text-muted);margin-top:1px;">Track your progress, achieve your goals</div>
+        </div>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:14px;">
+        <div>
+          <span class="label" data-i18n="username_label" style="display:block;margin-bottom:6px;">Username</span>
+          <input type="text" id="loginUsername" class="input-field" data-i18n-placeholder="username_ph" placeholder="Enter your username"
+                 onkeydown="if(event.key==='Enter')document.getElementById('loginPassword').focus()" />
+        </div>
+        <div>
+          <span class="label" data-i18n="password_label" style="display:block;margin-bottom:6px;">Password</span>
+          <input type="password" id="loginPassword" class="input-field" data-i18n-placeholder="password_ph" placeholder="Enter password"
+                 onkeydown="if(event.key==='Enter')doLogin()" />
+        </div>
+        <div id="loginErr" class="err-msg hidden" style="margin-top:-6px;"></div>
+        <button class="btn-primary" data-i18n="signin_btn" style="width:100%;padding:11px;font-size:14px;margin-top:4px;" onclick="doLogin()">
+          Sign In
+        </button>
+        <button class="btn-ghost" data-i18n="guest_btn" style="width:100%;padding:9px;font-size:13px;" onclick="enterGuest()">
+          Continue as Guest
+        </button>
+        <p data-i18n="login_hint" style="font-size:11px;color:var(--text-dim);text-align:center;line-height:1.6;">
+          New here? First login creates your account.<br/>Data is fully isolated between usernames on the same device.
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== 主应用 ===== -->
+  <div id="appPage" class="relative z-10 flex flex-col h-screen">
+
+    <header class="app-header">
+      <div class="logo-mark"></div>
+      <h1 data-i18n="app_name" style="font-size:17px;font-weight:700;letter-spacing:-0.02em;margin-left:10px;color:var(--app-name);">Score Tracker</h1>
+      <!-- Action buttons (variable width, centered) -->
+      <div class="header-actions">
+        <button class="btn-primary" data-i18n="add_score" onclick="openScoreModal()">+ Add Score</button>
+        <button class="btn-ghost" data-i18n="export_excel" style="padding:6px 14px;font-size:12px;" onclick="exportExcel()">Export Excel</button>
+        <button class="btn-ghost" data-i18n="share" style="padding:6px 14px;font-size:12px;" onclick="openShareCard()">Share</button>
+      </div>
+      <!-- Icon controls (fixed size, pinned to right edge — immune to text-width changes) -->
+      <div class="header-controls">
+        <button id="themeToggle" onclick="toggleTheme()" style="background:var(--surface-2);border:1px solid var(--border-hover);color:var(--text);border-radius:6px;width:36px;height:30px;cursor:pointer;font-family:inherit;display:flex;align-items:center;justify-content:center;line-height:1;padding:0;"><svg id="themeIconSun" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg><svg id="themeIconMoon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:none;"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg></button>
+        <button id="langToggle" onclick="toggleLang()" style="background:var(--surface-2);border:1px solid var(--border-hover);color:var(--text);border-radius:6px;width:52px;height:30px;cursor:pointer;font-family:inherit;display:flex;align-items:center;justify-content:center;line-height:1;padding:0;"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10A15.3 15.3 0 0112 2z"/></svg><span id="langLabel" style="margin-left:4px;font-size:11px;font-weight:600;width:24px;text-align:center;overflow:hidden;">中文</span></button>
+        <div class="user-chip" style="cursor:pointer;position:relative;" onclick="handleChipClick(event)">
+          <div class="avatar" id="userAvatar"></div>
+          <span id="userLabel"></span>
+          <svg id="chipChevron" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="margin-left:2px;opacity:0.4;">
+            <polyline points="6 9 12 15 18 9"/>
+          </svg>
+
+          <!-- 用户菜单下拉：以 user-chip 为定位参照，正下方左对齐头像 -->
+          <div id="profileMenu" class="hidden" style="position:absolute;top:calc(100% + 6px);left:0;z-index:200;background:var(--panel-bg-2);border:1px solid var(--border);border-radius:12px;padding:5px;min-width:150px;box-shadow:var(--shadow-sm);backdrop-filter:blur(20px);">
+            <button onclick="changeAvatar()" style="display:flex;align-items:center;gap:8px;width:100%;background:none;border:none;color:var(--text);padding:8px 12px;font-size:13px;cursor:pointer;border-radius:8px;font-family:inherit;transition:background .12s;" onmouseover="this.style.background='var(--surface-hover)'" onmouseout="this.style.background='none'">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 20v-1a6 6 0 0 1 6-6h4a6 6 0 0 1 6 6v1"/></svg>
+              <span data-i18n="change_avatar">Change Avatar</span>
+            </button>
+            <button onclick="askLogout()" style="display:flex;align-items:center;gap:8px;width:100%;background:none;border:none;color:var(--text);padding:8px 12px;font-size:13px;cursor:pointer;border-radius:8px;font-family:inherit;transition:background .12s;" onmouseover="this.style.background='var(--surface-hover)'" onmouseout="this.style.background='none'">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+              <span data-i18n="signout">Sign Out</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <div id="validationBar" class="hidden"></div>
+
+    <div class="main-scroll">
+      <div class="main-grid">
+
+        <section class="card" style="padding:20px;">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+            <span class="section-title" id="radarTitle">Subject Scores</span>
+            <button id="clearRadarBtn" data-i18n="clear" class="btn-subtle hidden" onclick="clearRadarSelection()">Clear</button>
+          </div>
+          <div style="position:relative;min-height:260px;">
+            <canvas id="radarChart"></canvas>
+            <div id="radarEmpty" data-i18n="radar_empty" class="chart-placeholder">Click an exam below<br/>to view its subject score radar</div>
+          </div>
+        </section>
+
+        <section class="card" style="padding:20px;">
+          <span class="section-title" data-i18n="line_title" style="display:block;margin-bottom:14px;">Score Trend</span>
+          <div style="position:relative;min-height:260px;">
+            <canvas id="lineChart"></canvas>
+            <div id="lineEmpty" data-i18n="line_empty" class="chart-placeholder">No data yet<br/>A trend line appears after your first entry</div>
+          </div>
+        </section>
+
+        <div class="full">
+          <section class="card" style="padding:20px;">
+            <span class="section-title" data-i18n="records_title" style="display:block;margin-bottom:14px;">Exam Records</span>
+            <div id="recordList"></div>
+          </section>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== 录入分数模态框 ===== -->
+  <div id="scoreModal" class="modal-overlay hidden" onclick="overlayClose(event,'scoreModal')">
+    <div class="modal-card fade-in" onclick="event.stopPropagation()">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
+        <span class="section-title" data-i18n="score_modal_title" style="font-size:15px;">Add Exam Score</span>
+        <button class="btn-subtle" style="font-size:20px;" onclick="closeModal('scoreModal')">&times;</button>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:16px;">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+          <div>
+            <span class="label" style="display:block;margin-bottom:5px;">
+              <span data-i18n="exam_date_label">Date</span>
+              <span data-i18n="exam_date_opt" style="color:var(--text-dim);font-weight:400;"> · optional</span>
+            </span>
+            <input type="date" id="examDate" class="input-field" />
+          </div>
+          <div>
+            <span class="label" style="display:block;margin-bottom:5px;">
+              <span data-i18n="exam_name_label">Exam Name</span>
+              <span style="color:var(--danger);">*</span>
+            </span>
+            <input type="text" id="examName" class="input-field" data-i18n-placeholder="exam_name_ph" placeholder="Monthly Exam 1" />
+          </div>
+        </div>
+
+        <div class="card" style="padding:14px;">
+          <span class="label" data-i18n="subjects_scores" style="display:block;margin-bottom:10px;">Subjects &amp; Scores</span>
+          <div style="display:flex;gap:8px;margin-bottom:10px;">
+            <input type="text" id="newSubName" class="input-field" data-i18n-placeholder="subject_name_ph" style="font-size:12px;padding:7px 10px;flex:1;"
+                   placeholder="Subject Name" onkeydown="onSubKeyDown(event)" />
+            <input type="number" id="newSubScore" class="input-field" data-i18n-placeholder="score_ph" style="font-size:12px;padding:7px 10px;width:72px;"
+                   placeholder="Score" min="0" onkeydown="onScoreKeyDown(event)" />
+            <input type="number" id="newSubWeight" class="input-field" data-i18n-placeholder="weight_ph" style="font-size:12px;padding:7px 10px;width:60px;" placeholder="Weight" min="0" step="0.1" onkeydown="onWeightKeyDown(event)" />
+            <button class="btn-primary" data-i18n="add_btn" style="padding:6px 14px;font-size:12px;flex-shrink:0;" onclick="addSubjectRow()">Add</button>
+          </div>
+          <div id="subjectErr" class="err-msg hidden" style="margin-bottom:8px;"></div>
+          <div id="subjectScoreList" style="display:flex;flex-direction:column;gap:7px;"></div>
+          <p id="noSubjectHint" data-i18n="no_subject_hint" style="font-size:11px;color:var(--text-dim);margin-top:6px;">Enter a subject name and score, then click "Add"</p>
+        </div>
+
+        <div id="scoreErr" class="err-msg hidden"></div>
+
+        <div style="display:flex;gap:10px;padding-top:4px;">
+          <button class="btn-primary" data-i18n="save_score" style="flex:1;" onclick="submitScore()">Save Score</button>
+          <button class="btn-ghost" data-i18n="cancel" style="flex:1;" onclick="closeModal('scoreModal')">Cancel</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== 日期冲突确认 ===== -->
+  <div id="confirmModal" class="modal-overlay hidden">
+    <div class="confirm-box fade-in">
+      <p style="font-size:13px;margin-bottom:4px;color:var(--text-dim);">
+        <strong id="conflictExamName" style="color:var(--accent-text);"></strong>
+        <span style="color:var(--text-muted);"> · </span>
+        <strong id="conflictDate" style="color:var(--accent-text);"></strong>
+      </p>
+      <p data-i18n="conflict_overwrite_q" style="font-size:13px;margin-bottom:18px;margin-top:10px;">A record already exists. Overwrite with new data?</p>
+      <div style="display:flex;gap:10px;">
+        <button class="btn-danger" data-i18n="overwrite" style="flex:1;" onclick="confirmOverwrite(true)">Overwrite</button>
+        <button class="btn-ghost" data-i18n="keep_original" style="flex:1;" onclick="confirmOverwrite(false)">Keep Original</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== 登出确认 ===== -->
+  <div id="logoutModal" class="modal-overlay hidden">
+    <div class="confirm-box fade-in">
+      <p data-i18n="logout_title" style="font-size:14px;margin-bottom:6px;color:var(--app-name);font-weight:600;">Sign Out?</p>
+      <p data-i18n="logout_hint" style="font-size:12px;color:var(--text-dim);margin-bottom:18px;line-height:1.6;">Your data is saved automatically. You can view it next time you sign in.</p>
+      <div style="display:flex;gap:10px;">
+        <button class="btn-danger" data-i18n="confirm_logout" style="flex:1;" onclick="doLogout()">Confirm Sign Out</button>
+        <button class="btn-ghost" data-i18n="cancel" style="flex:1;" onclick="closeModal('logoutModal')">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== 成绩分享卡 ===== -->
+  <div id="shareModal" class="modal-overlay hidden" onclick="overlayClose(event,'shareModal')">
+    <div class="modal-card fade-in" style="max-width:560px;padding:20px;" onclick="event.stopPropagation()">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+        <span class="section-title" data-i18n="share_title" style="font-size:15px;">Score Share Card</span>
+        <button class="btn-subtle" style="font-size:20px;" onclick="closeModal('shareModal')">&times;</button>
+      </div>
+      <div id="shareEmpty" data-i18n="share_empty" style="text-align:center;color:var(--text-dim);font-size:13px;padding:40px 0;line-height:1.8;">
+        No exam records yet<br/><span style="font-size:11px;">Generate a share card after adding scores</span>
+      </div>
+      <div id="shareContent" style="display:none;">
+        <div style="background:#2a2a3e;border:1px solid var(--border);border-radius:12px;padding:8px;overflow:hidden;">
+          <img id="sharePreview" style="width:100%;border-radius:8px;display:block;" alt="Score Share Card" />
+        </div>
+        <div style="display:flex;gap:10px;margin-top:14px;">
+          <button class="btn-primary" data-i18n="download_img" style="flex:1;" onclick="downloadShareCard()">Download Image</button>
+          <button class="btn-ghost" data-i18n="close" style="flex:1;" onclick="closeModal('shareModal')">Close</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== 编辑考试记录模态框 ===== -->
+  <div id="editModal" class="modal-overlay hidden" onclick="overlayClose(event,'editModal')">
+    <div class="modal-card fade-in" onclick="event.stopPropagation()">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
+        <span class="section-title" data-i18n="edit_record" style="font-size:15px;">Edit Record</span>
+        <button class="btn-subtle" style="font-size:20px;" onclick="closeModal('editModal')">&times;</button>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:16px;">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+          <div>
+            <span class="label" style="display:block;margin-bottom:5px;">
+              <span data-i18n="exam_date_label">Date</span>
+              <span data-i18n="exam_date_opt" style="color:var(--text-dim);font-weight:400;"> · optional</span>
+            </span>
+            <input type="date" id="editExamDate" class="input-field" />
+          </div>
+          <div>
+            <span class="label" style="display:block;margin-bottom:5px;">
+              <span data-i18n="exam_name_label">Exam Name</span>
+              <span style="color:var(--danger);">*</span>
+            </span>
+            <input type="text" id="editExamName" class="input-field" data-i18n-placeholder="exam_name_ph" placeholder="Monthly Exam 1" />
+          </div>
+        </div>
+
+        <div class="card" style="padding:14px;">
+          <span class="label" data-i18n="subjects_scores" style="display:block;margin-bottom:10px;">Subjects &amp; Scores</span>
+          <div id="editSubjectScoreList" style="display:flex;flex-direction:column;gap:7px;"></div>
+          <button onclick="addEditSubject()" style="margin-top:8px;background:var(--accent-dim);border:1px dashed var(--accent-border);color:var(--accent-text);border-radius:8px;padding:6px 12px;font-size:12px;cursor:pointer;font-family:inherit;transition:background .15s,border-color .15s;" onmouseover="this.style.background='var(--accent-bg)';this.style.borderColor='var(--accent-border-strong)'" onmouseout="this.style.background='var(--accent-dim)';this.style.borderColor='var(--accent-border)'" data-i18n="add_subject">Add Subject</button>
+        </div>
+
+        <div id="editErr" class="err-msg hidden"></div>
+
+        <div style="display:flex;gap:10px;padding-top:4px;">
+          <button class="btn-primary" data-i18n="save" style="flex:1;" onclick="saveEdit()">Save</button>
+          <button class="btn-ghost" data-i18n="cancel" style="flex:1;" onclick="closeModal('editModal')">Cancel</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 隐藏的渲染画布 -->
+  <canvas id="shareCanvas" width="540" height="500" style="display:none;"></canvas>
+  <input type="file" id="avatarInput" accept="image/*" style="display:none;" onchange="handleAvatarUpload(event)" />
+
+<script>
+// ====== 国际化（i18n） ======
+// 默认英文；语言偏好保存在 localStorage['sai_lang']
+var currentLang = 'en';
+try {
+  var savedLang = localStorage.getItem('sai_lang');
+  if (savedLang === 'zh' || savedLang === 'en') currentLang = savedLang;
+} catch (e) { /* localStorage 不可用时使用默认英文 */ }
+
+var LANGS = {
+  en: {
+    app_name: 'Score Tracker',
+    app_subtitle: 'Track your progress, achieve your goals',
+    username_label: 'Username',
+    username_ph: 'Enter your username',
+    password_label: 'Password',
+    password_ph: 'Enter password',
+    signin_btn: 'Sign In',
+    guest_btn: 'Continue as Guest',
+    login_hint: 'New here? First login creates your account.<br/>Data is fully isolated between usernames on the same device.',
+    change_avatar: 'Change Avatar',
+    signout: 'Sign Out',
+    add_score: '+ Add Score',
+    export_excel: 'Export Excel',
+    share: 'Share',
+    radar_title: 'Subject Scores',
+    clear: 'Clear',
+    radar_empty: 'Click an exam below<br/>to view its subject score radar',
+    line_title: 'Score Trend',
+    line_empty: 'No data yet<br/>A trend line appears after your first entry',
+    records_title: 'Exam Records',
+    records_empty: 'No exam records yet<br/><span style="font-size:11px;">Click "Add Score" in the top right to start</span>',
+    score_modal_title: 'Add Exam Score',
+    exam_date_label: 'Date',
+    exam_date_opt: ' \u00b7 optional',
+    exam_name_label: 'Exam Name',
+    exam_name_ph: 'Monthly Exam 1',
+    subjects_scores: 'Subjects &amp; Scores',
+    subject_name_ph: 'Subject Name',
+    score_ph: 'Score',
+    add_subject: 'Add Subject',
+    remove_subject: 'Remove',
+    confirm_remove_subj: 'Remove this subject from this record?',
+    add_btn: 'Add',
+    no_subject_hint: 'Enter a subject name and score, then click "Add"',
+    save_score: 'Save Score',
+    cancel: 'Cancel',
+    conflict_overwrite_q: 'A record already exists. Overwrite with new data?',
+    overwrite: 'Overwrite',
+    keep_original: 'Keep Original',
+    logout_title: 'Sign Out?',
+    logout_hint: 'Your data is saved automatically. You can view it next time you sign in.',
+    confirm_logout: 'Confirm Sign Out',
+    share_title: 'Score Share Card',
+    share_empty: 'No exam records yet<br/><span style="font-size:11px;">Generate a share card after adding scores</span>',
+    download_img: 'Download Image',
+    close: 'Close',
+    // 提示信息
+    err_username: 'Please enter a username',
+    err_password: 'Please enter a password',
+    err_username_len: 'Username must be at least 2 characters',
+    err_password_wrong: 'Wrong password',
+    guest_label: 'Guest',
+    guest_login_hint: 'Sign in to save data and use the share feature',
+    share_login_required: 'Please sign in to generate and download share cards',
+    avatar_too_big: 'Avatar file must be under 2MB',
+    err_subj_name: 'Please enter a subject name',
+    err_score: 'Please enter a valid score',
+    err_subj_dup: 'has already been added',
+    err_exam_name: 'Please enter an exam name',
+    err_no_subject: 'Please add at least one subject and score',
+    no_records_export: 'No exam records to export',
+    excel_loading: 'Excel library is loading, please try again later',
+    excel_sheet: 'Score Records',
+    file_scores: 'scores',
+    share_file_prefix: 'scorecard',
+    edit_record: 'Edit Record',
+    record_updated: 'Record updated',
+    save: 'Save',
+    err_subj_dup_edit: 'Duplicate subject name',
+    weight_ph: 'Weight',
+    weight_label: 'Weight',
+    err_weight: 'Weight must be greater than 0'
+  },
+  zh: {
+    app_name: 'Score Tracker',
+    app_subtitle: '记录进步，成就目标',
+    username_label: '用户名',
+    username_ph: '输入你的用户名',
+    password_label: '密码',
+    password_ph: '输入密码',
+    signin_btn: '登录',
+    guest_btn: '以访客身份继续',
+    login_hint: '首次使用会自动注册账号<br/>同一设备上不同用户名的数据完全隔离',
+    change_avatar: '更改头像',
+    signout: '登出',
+    add_score: '+ 录入分数',
+    export_excel: '导出 Excel',
+    share: '分享',
+    radar_title: '各科得分',
+    clear: '清除',
+    radar_empty: '点击下方某次考试<br/>查看该次各科得分雷达图',
+    line_title: '分数趋势',
+    line_empty: '还没有数据<br/>录入第一次分数后这里会出现趋势线',
+    records_title: '考试记录',
+    records_empty: '还没有考试记录<br/><span style="font-size:11px;">点击右上角「录入分数」开始</span>',
+    score_modal_title: '录入考试分数',
+    exam_date_label: '考试日期',
+    exam_date_opt: ' \u00b7 可选',
+    exam_name_label: '考试名称',
+    exam_name_ph: '月考一',
+    subjects_scores: '科目与分数',
+    subject_name_ph: '科目名称',
+    score_ph: '分数',
+    add_subject: '添加科目',
+    remove_subject: '移除',
+    confirm_remove_subj: '确认从此记录中移除该科目？',
+    add_btn: '添加',
+    no_subject_hint: '输入科目名称和分数，点「添加」加入列表',
+    save_score: '保存分数',
+    cancel: '取消',
+    conflict_overwrite_q: '已有记录，是否用新数据覆盖？',
+    overwrite: '覆盖',
+    keep_original: '保留原来的',
+    logout_title: '确认登出？',
+    logout_hint: '你的数据已自动保存，下次登录可继续查看。',
+    confirm_logout: '确认登出',
+    share_title: '成绩分享卡',
+    share_empty: '还没有考试记录<br/><span style="font-size:11px;">录入分数后即可生成分享卡</span>',
+    download_img: '下载图片',
+    close: '关闭',
+    // 提示信息
+    err_username: '请输入用户名',
+    err_password: '请输入密码',
+    err_username_len: '用户名至少 2 个字符',
+    err_password_wrong: '密码错误',
+    guest_label: '游客',
+    guest_login_hint: '登录后可保存数据并使用分享功能',
+    share_login_required: '请先登录，才能生成和下载分享卡',
+    avatar_too_big: '头像文件不能超过 2MB',
+    err_subj_name: '请输入科目名称',
+    err_score: '请输入有效分数',
+    err_subj_dup: '已经添加过了',
+    err_exam_name: '请填写考试名称',
+    err_no_subject: '请至少添加一个科目和分数',
+    no_records_export: '暂无考试记录，无法导出',
+    excel_loading: 'Excel 库加载中，请稍后再试',
+    excel_sheet: '成绩记录',
+    file_scores: '成绩记录',
+    share_file_prefix: '成绩卡',
+    edit_record: '编辑记录',
+    record_updated: '记录已更新',
+    save: '保存',
+    err_subj_dup_edit: '科目名称重复',
+    weight_ph: '权重',
+    weight_label: '权重',
+    err_weight: '权重必须大于0'
+  }
+};
+
+// 取当前语言对应文案；缺失时回退到英文，再回退到 key 本身
+function t(key) {
+  var dict = LANGS[currentLang] || LANGS.en;
+  if (dict[key] !== undefined) return dict[key];
+  if (LANGS.en[key] !== undefined) return LANGS.en[key];
+  return key;
+}
+
+// 应用语言：更新所有 data-i18n / data-i18n-placeholder 元素，并刷新动态内容
+function applyLang(lang) {
+  currentLang = (lang === 'zh') ? 'zh' : 'en';
+  try { localStorage.setItem('sai_lang', currentLang); } catch (e) { /* 忽略存储失败 */ }
+  try { document.documentElement.lang = currentLang; } catch (e) {}
+
+  // 文本内容（支持含 HTML 的文案，如 <br/>）
+  var nodes = document.querySelectorAll('[data-i18n]');
+  for (var i = 0; i < nodes.length; i++) {
+    nodes[i].innerHTML = t(nodes[i].getAttribute('data-i18n'));
+  }
+  // 输入框 placeholder
+  var phNodes = document.querySelectorAll('[data-i18n-placeholder]');
+  for (var j = 0; j < phNodes.length; j++) {
+    phNodes[j].placeholder = t(phNodes[j].getAttribute('data-i18n-placeholder'));
+  }
+
+  // 文档标题
+  document.title = t('app_name');
+
+  // 语言切换按钮：显示「对面」语言名
+  var langLabel = document.getElementById('langLabel');
+  if (langLabel) langLabel.textContent = (currentLang === 'en') ? '中文' : 'EN';
+
+  // 若主应用已可见且已有用户/游客态，刷新动态渲染内容（图表标题、记录列表等）
+  var appEl = document.getElementById('appPage');
+  if (appEl && appEl.style.display !== 'none' && (currentUser || isGuest)) {
+    renderRecordList();
+    renderCharts();
+  }
+}
+
+// 切换语言
+function toggleLang() {
+  applyLang(currentLang === 'en' ? 'zh' : 'en');
+}
+
+// ====== 主题（亮色/暗色） ======
+// 默认暗色；主题偏好保存在 localStorage['sai_theme']
+var currentTheme = 'dark';
+try {
+  var savedTheme = localStorage.getItem('sai_theme');
+  if (savedTheme === 'light' || savedTheme === 'dark') currentTheme = savedTheme;
+} catch (e) { /* localStorage 不可用时使用默认暗色 */ }
+
+// 应用主题：切换 <html> 上的 light-mode class，更新按钮图标，并按需刷新图表
+function applyTheme(theme) {
+  currentTheme = theme;
+  try { localStorage.setItem('sai_theme', theme); } catch (e) { /* 忽略存储失败 */ }
+  if (theme === 'light') {
+    document.documentElement.classList.add('light-mode');
+  } else {
+    document.documentElement.classList.remove('light-mode');
+  }
+  // 更新主题切换按钮图标（暗色→太阳提示切到亮色，亮色→月亮提示切到暗色）
+  var sunIcon = document.getElementById('themeIconSun');
+  var moonIcon = document.getElementById('themeIconMoon');
+  if (sunIcon && moonIcon) {
+    sunIcon.style.display = theme === 'dark' ? '' : 'none';
+    moonIcon.style.display = theme === 'light' ? '' : 'none';
+  }
+  // 如果图表已渲染，刷新以应用新主题颜色
+  if (typeof renderCharts === 'function' && (currentUser || isGuest)) {
+    renderCharts();
+  }
+}
+
+// 切换主题
+function toggleTheme() {
+  applyTheme(currentTheme === 'dark' ? 'light' : 'dark');
+}
+
+// ====== 调色盘 ======
+var PALETTE = [
+  '#f87171','#fb923c','#facc15','#4ade80','#22d3ee','#c084fc',
+  '#f472b6','#60a5fa','#a3e635','#34d399','#e879f9','#fbbf24'
+];
+
+function assignColor(existingSubjects) {
+  var usedColors = {};
+  existingSubjects.forEach(function(s) { usedColors[s.color] = true; });
+  for (var i = 0; i < PALETTE.length; i++) {
+    if (!usedColors[PALETTE[i]]) return PALETTE[i];
+  }
+  return '#' + Math.floor(Math.random() * 0xffffff).toString(16).padStart(6, '0');
+}
+
+// ====== 用户状态 ======
+var currentUser = null;  // 当前登录用户名（null = 游客）
+var isGuest = false;     // true = 跳过登录的游客模式
+
+// 简单 hash（djb2，仅用于本地密码核验，不做网络传输）
+function hashStr(str) {
+  var hash = 5381;
+  for (var i = 0; i < str.length; i++) {
+    hash = ((hash << 5) + hash) + str.charCodeAt(i);
+    hash = hash & hash; // 转 32 位整数
+  }
+  return hash.toString(16);
+}
+
+function userKey(suffix) {
+  return 'sai_' + currentUser + '_' + suffix;
+}
+
+// ====== 登录 / 注册 ======
+function doLogin() {
+  var username = document.getElementById('loginUsername').value.trim();
+  var password = document.getElementById('loginPassword').value;
+  var errEl = document.getElementById('loginErr');
+
+  if (!username) {
+    errEl.textContent = t('err_username');
+    errEl.classList.remove('hidden');
+    return;
+  }
+  if (!password) {
+    errEl.textContent = t('err_password');
+    errEl.classList.remove('hidden');
+    return;
+  }
+  if (username.length < 2) {
+    errEl.textContent = t('err_username_len');
+    errEl.classList.remove('hidden');
+    return;
+  }
+
+  var storedHash = localStorage.getItem('sai_auth_' + username);
+  var inputHash = hashStr(password);
+
+  if (storedHash === null) {
+    // 新用户 — 自动注册
+    localStorage.setItem('sai_auth_' + username, inputHash);
+    errEl.classList.add('hidden');
+    enterApp(username);
+  } else if (storedHash === inputHash) {
+    // 已有用户 — 密码正确
+    errEl.classList.add('hidden');
+    enterApp(username);
+  } else {
+    errEl.textContent = t('err_password_wrong');
+    errEl.classList.remove('hidden');
+    document.getElementById('loginPassword').select();
+  }
+}
+
+function enterApp(username) {
+  currentUser = username;
+  isGuest = false;  // 确保已登录用户不被误判为游客
+  // 记住登录状态（仅记用户名，不记密码）
+  localStorage.setItem('sai_session', username);
+
+  // 更新 header 用户信息
+  document.getElementById('userLabel').textContent = username;
+  updateUserAvatar();
+
+  // 切换页面
+  document.getElementById('loginPage').style.display = 'none';
+  var appEl = document.getElementById('appPage');
+  appEl.style.removeProperty('display');
+  appEl.style.display = 'flex';
+  appEl.style.flexDirection = 'column';
+
+  // 加载该用户数据
+  load();
+  renderRecordList();
+  renderCharts();
+  document.getElementById('examDate').value = today();
+}
+
+// ====== 游客模式 ======
+function enterGuest() {
+  isGuest = true;
+  currentUser = null;
+
+  // header: 隐藏用户菜单，只显示「登录」按钮
+  document.getElementById('userLabel').textContent = t('guest_label');
+  var avatarEl = document.getElementById('userAvatar');
+  avatarEl.textContent = '?';
+
+  document.getElementById('loginPage').style.display = 'none';
+  var appEl = document.getElementById('appPage');
+  appEl.style.removeProperty('display');
+  appEl.style.display = 'flex';
+  appEl.style.flexDirection = 'column';
+
+  subjects = [];
+  scoreRecords = [];
+  selectedExamIdx = -1;
+  pendingRecord = null;
+
+  renderRecordList();
+  renderCharts();
+  document.getElementById('examDate').value = today();
+}
+
+function askLogout() {
+  closeProfileMenu();
+  openModal('logoutModal');
+}
+
+// ====== 用户菜单 ======
+function handleChipClick(e) {
+  if (isGuest) {
+    // 游客点头像 → 跳回登录页
+    document.getElementById('appPage').style.display = 'none';
+    document.getElementById('loginPage').style.display = 'flex';
+    var errEl = document.getElementById('loginErr');
+    errEl.textContent = t('guest_login_hint');
+    errEl.classList.remove('hidden');
+    setTimeout(function() { document.getElementById('loginUsername').focus(); }, 100);
+    return;
+  }
+  // 点击来自菜单内部（更改头像 / 登出按钮）时，事件会冒泡到 chip。
+  // 这些按钮自身已调用 closeProfileMenu()，此处必须拦截冒泡，
+  // 否则 toggleProfileMenu 会把刚关闭的菜单重新打开。
+  if (e.target.closest('#profileMenu')) return;
+  toggleProfileMenu(e);
+}
+
+function toggleProfileMenu(e) {
+  e.stopPropagation();
+  var menu = document.getElementById('profileMenu');
+  if (menu.classList.contains('hidden')) {
+    menu.classList.remove('hidden');
+  } else {
+    menu.classList.add('hidden');
+  }
+}
+
+function closeProfileMenu() {
+  document.getElementById('profileMenu').classList.add('hidden');
+}
+
+// 点击空白处关闭菜单
+document.addEventListener('click', function(e) {
+  var menu = document.getElementById('profileMenu');
+  if (!menu || menu.classList.contains('hidden')) return;
+  var chip = e.target.closest('.user-chip');
+  if (!chip) closeProfileMenu();
+});
+
+// ====== 头像管理 ======
+function changeAvatar() {
+  closeProfileMenu();
+  document.getElementById('avatarInput').click();
+}
+
+function handleAvatarUpload(e) {
+  var file = e.target.files[0];
+  if (!file) return;
+  // 限制 2MB
+  if (file.size > 2 * 1024 * 1024) {
+    showValidation(t('avatar_too_big'));
+    e.target.value = '';
+    return;
+  }
+  var reader = new FileReader();
+  reader.onload = function(ev) {
+    var dataUrl = ev.target.result;
+    // 压缩到 96x96，减小 localStorage 占用
+    var img = new Image();
+    img.onload = function() {
+      var c = document.createElement('canvas');
+      c.width = 96; c.height = 96;
+      var cx = c.getContext('2d');
+      // 居中裁剪
+      var minSide = Math.min(img.width, img.height);
+      var sx = (img.width - minSide) / 2;
+      var sy = (img.height - minSide) / 2;
+      cx.drawImage(img, sx, sy, minSide, minSide, 0, 0, 96, 96);
+      var compressed = c.toDataURL('image/png');
+      localStorage.setItem('sai_avatar_' + currentUser, compressed);
+      updateUserAvatar();
+    };
+    img.src = dataUrl;
+  };
+  reader.readAsDataURL(file);
+  e.target.value = '';
+}
+
+function updateUserAvatar() {
+  var avatarEl = document.getElementById('userAvatar');
+  var saved = localStorage.getItem('sai_avatar_' + currentUser);
+  if (saved) {
+    avatarEl.innerHTML = '<img src="' + saved + '" style="width:100%;height:100%;border-radius:50%;object-fit:cover;" />';
+  } else {
+    avatarEl.textContent = currentUser.charAt(0).toUpperCase();
+  }
+}
+
+function doLogout() {
+  closeModal('logoutModal');
+  currentUser = null;
+  isGuest = false;
+  localStorage.removeItem('sai_session');
+  // 重置状态
+  subjects = [];
+  scoreRecords = [];
+  selectedExamIdx = -1;
+  pendingRecord = null;
+  // 销毁图表
+  if (radarChart) { radarChart.destroy(); radarChart = null; }
+  if (lineChart) { lineChart.destroy(); lineChart = null; }
+  // 清空输入
+  document.getElementById('loginUsername').value = '';
+  document.getElementById('loginPassword').value = '';
+  document.getElementById('loginErr').classList.add('hidden');
+  // 切回登录页
+  document.getElementById('appPage').style.display = 'none';
+  document.getElementById('loginPage').style.display = 'flex';
+  setTimeout(function() { document.getElementById('loginUsername').focus(); }, 100);
+}
+
+// ====== 应用状态 ======
+var subjects = [];
+var scoreRecords = [];
+var radarChart = null;
+var lineChart = null;
+var selectedExamIdx = -1;
+var pendingRecord = null;
+var tempSubjects = [];
+
+// ====== 持久化（按用户隔离，游客不存储） ======
+function save() {
+  if (isGuest) return;  // 游客模式：数据仅存在内存，不写 localStorage
+  localStorage.setItem(userKey('subjects'), JSON.stringify(subjects));
+  localStorage.setItem(userKey('records'), JSON.stringify(scoreRecords));
+}
+
+function load() {
+  if (isGuest) { subjects = []; scoreRecords = []; return; }
+  try { subjects = JSON.parse(localStorage.getItem(userKey('subjects'))) || []; } catch(e) { subjects = []; }
+  try { scoreRecords = JSON.parse(localStorage.getItem(userKey('records'))) || []; } catch(e) { scoreRecords = []; }
+}
+
+// ====== 初始化 ======
+function init() {
+  // 先应用语言偏好（更新所有静态文案）
+  applyLang(currentLang);
+
+  // 应用主题偏好（更新 light-mode class 与切换按钮图标）
+  applyTheme(currentTheme);
+
+  // 检查是否有已登录的 session
+  var session = localStorage.getItem('sai_session');
+  if (session) {
+    // 验证该用户账号仍存在
+    if (localStorage.getItem('sai_auth_' + session) !== null) {
+      enterApp(session);
+      return;
+    }
+  }
+  // 否则显示登录页
+  document.getElementById('loginPage').style.display = 'flex';
+  setTimeout(function() { document.getElementById('loginUsername').focus(); }, 100);
+}
+
+function today() {
+  return new Date().toISOString().split('T')[0];
+}
+
+// ====== 模态框 ======
+function openModal(id) { document.getElementById(id).classList.remove('hidden'); }
+function closeModal(id) { document.getElementById(id).classList.add('hidden'); }
+function overlayClose(e, id) { if (e.target === e.currentTarget) closeModal(id); }
+
+// ====== 录入模态框 ======
+function openScoreModal() {
+  document.getElementById('examDate').value = today();
+  document.getElementById('examName').value = '';
+  document.getElementById('newSubName').value = '';
+  document.getElementById('newSubScore').value = '';
+  document.getElementById('newSubWeight').value = '';
+  document.getElementById('scoreErr').classList.add('hidden');
+  document.getElementById('subjectErr').classList.add('hidden');
+  tempSubjects = [];
+  renderSubjectScoreList();
+  openModal('scoreModal');
+  setTimeout(function() { document.getElementById('newSubName').focus(); }, 120);
+}
+
+function onSubKeyDown(e) {
+  if (e.key === 'Enter') { e.preventDefault(); document.getElementById('newSubScore').focus(); }
+}
+function onScoreKeyDown(e) {
+  if (e.key === 'Enter') { e.preventDefault(); addSubjectRow(); }
+}
+function onWeightKeyDown(e) {
+  if (e.key === 'Enter') { e.preventDefault(); addSubjectRow(); }
+}
+
+function addSubjectRow() {
+  var nameEl = document.getElementById('newSubName');
+  var scoreEl = document.getElementById('newSubScore');
+  var weightEl = document.getElementById('newSubWeight');
+  var errEl = document.getElementById('subjectErr');
+  var name = nameEl.value.trim();
+  var scoreRaw = scoreEl.value.trim();
+  var weightRaw = weightEl ? weightEl.value.trim() : '';
+
+  if (!name) {
+    errEl.textContent = t('err_subj_name');
+    errEl.classList.remove('hidden');
+    return;
+  }
+  if (scoreRaw === '' || isNaN(Number(scoreRaw)) || Number(scoreRaw) < 0) {
+    errEl.textContent = t('err_score');
+    errEl.classList.remove('hidden');
+    return;
+  }
+  // 权重：空则默认 1，否则必须 > 0
+  var weight = (weightRaw === '') ? 1 : Number(weightRaw);
+  if (weightRaw !== '' && (isNaN(weight) || weight <= 0)) {
+    errEl.textContent = t('err_weight');
+    errEl.classList.remove('hidden');
+    return;
+  }
+  if (tempSubjects.some(function(s) { return s.name === name; })) {
+    errEl.textContent = '"' + name + '" ' + t('err_subj_dup');
+    errEl.classList.remove('hidden');
+    return;
+  }
+  errEl.classList.add('hidden');
+
+  var existing = subjects.find(function(s) { return s.name === name; });
+  var allExisting = subjects.concat(tempSubjects.map(function(ts) { return { name: ts.name, color: ts.color }; }));
+  var color = existing ? existing.color : assignColor(allExisting);
+
+  tempSubjects.push({ name: name, score: Number(scoreRaw), weight: weight, color: color });
+  nameEl.value = '';
+  scoreEl.value = '';
+  if (weightEl) weightEl.value = '';
+  nameEl.focus();
+  renderSubjectScoreList();
+}
+
+function removeSubjectRow(idx) {
+  tempSubjects.splice(idx, 1);
+  renderSubjectScoreList();
+}
+
+function renderSubjectScoreList() {
+  var el = document.getElementById('subjectScoreList');
+  var hint = document.getElementById('noSubjectHint');
+  if (tempSubjects.length === 0) {
+    el.innerHTML = '';
+    hint.style.display = 'block';
+    return;
+  }
+  hint.style.display = 'none';
+  el.innerHTML = tempSubjects.map(function(s, i) {
+    var weightStr = (s.weight && s.weight !== 1) ?
+      '<span style="font-size:11px;color:var(--text-muted);margin-left:2px;">(' + t('weight_label') + ':' + s.weight + ')</span>' : '';
+    return '<div style="display:flex;align-items:center;gap:8px;' +
+      'background:var(--surface-3);border:1px solid var(--border);border-radius:8px;padding:6px 10px;">' +
+      '<span style="color:' + s.color + ';font-size:10px;">&#9679;</span>' +
+      '<span style="font-size:13px;flex:1;">' + s.name + '</span>' +
+      '<span style="font-size:12px;color:var(--score-color);font-weight:600;">' + s.score + '</span>' +
+      weightStr +
+      '<button onclick="removeSubjectRow(' + i + ')" ' +
+        'style="background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:15px;line-height:1;padding:0 2px;"' +
+        'onmouseover="this.style.color=\'var(--danger)\'" onmouseout="this.style.color=\'var(--text-muted)\'">&times;</button>' +
+      '</div>';
+  }).join('');
+}
+
+// ====== 提交 ======
+function submitScore() {
+  var date = document.getElementById('examDate').value || today();
+  var exam = document.getElementById('examName').value.trim();
+  var errEl = document.getElementById('scoreErr');
+
+  if (!exam) {
+    errEl.textContent = t('err_exam_name');
+    errEl.classList.remove('hidden');
+    return;
+  }
+  if (tempSubjects.length === 0) {
+    errEl.textContent = t('err_no_subject');
+    errEl.classList.remove('hidden');
+    return;
+  }
+  errEl.classList.add('hidden');
+
+  tempSubjects.forEach(function(ts) {
+    if (!subjects.some(function(s) { return s.name === ts.name; })) {
+      subjects.push({ name: ts.name, color: ts.color });
+    }
+  });
+  save();
+
+  var scores = {};
+  var weights = {};
+  tempSubjects.forEach(function(ts) {
+    scores[ts.name] = ts.score;
+    weights[ts.name] = ts.weight || 1;
+  });
+
+  var existIdx = scoreRecords.findIndex(function(r) { return r.date === date && r.exam === exam; });
+  if (existIdx !== -1) {
+    pendingRecord = { date: date, exam: exam, scores: scores, weights: weights, existIdx: existIdx };
+    document.getElementById('conflictDate').textContent = date;
+    document.getElementById('conflictExamName').textContent = scoreRecords[existIdx].exam;
+    openModal('confirmModal');
+    return;
+  }
+
+  commitRecord({ date: date, exam: exam, scores: scores, weights: weights });
+}
+
+function confirmOverwrite(yes) {
+  closeModal('confirmModal');
+  if (!pendingRecord) return;
+  if (yes) {
+    scoreRecords[pendingRecord.existIdx] = {
+      date: pendingRecord.date, exam: pendingRecord.exam, scores: pendingRecord.scores, weights: pendingRecord.weights
+    };
+    pendingRecord = null;
+    closeModal('scoreModal');
+    save();
+    renderRecordList();
+    renderCharts();
+  } else {
+    pendingRecord = null;
+  }
+}
+
+function commitRecord(rec) {
+  scoreRecords.push(rec);
+  scoreRecords.sort(function(a, b) { return a.date.localeCompare(b.date); });
+  save();
+  closeModal('scoreModal');
+  renderRecordList();
+  renderCharts();
+}
+
+function deleteRecord(idx) {
+  scoreRecords.splice(idx, 1);
+  var used = {};
+  scoreRecords.forEach(function(r) { Object.keys(r.scores).forEach(function(s) { used[s] = true; }); });
+  subjects = subjects.filter(function(s) { return used[s.name]; });
+  save();
+  if (selectedExamIdx === idx) {
+    selectedExamIdx = -1;
+  } else if (selectedExamIdx > idx) {
+    selectedExamIdx--;
+  }
+  renderRecordList();
+  renderCharts();
+}
+
+// ====== 编辑记录 ======
+var editingIndex = -1;  // 当前正在编辑的记录索引
+
+/**
+ * 打开编辑弹窗，填充对应记录数据。
+ * @param {number} index - scoreRecords 中的索引
+ */
+function editRecord(index) {
+  var rec = scoreRecords[index];
+  if (!rec) return;
+
+  editingIndex = index;
+
+  // 填充基本字段
+  document.getElementById('editExamDate').value = rec.date || '';
+  document.getElementById('editExamName').value = rec.exam || '';
+  document.getElementById('editErr').classList.add('hidden');
+
+  // 动态生成各科目分数输入框
+  var listEl = document.getElementById('editSubjectScoreList');
+  // 优先按 subjects 数组顺序显示，再补充记录中有但 subjects 中已不存在的科目
+  var recSubjectNames = Object.keys(rec.scores);
+  var orderedNames = subjects
+    .filter(function(s) { return rec.scores[s.name] !== undefined; })
+    .map(function(s) { return s.name; });
+  recSubjectNames.forEach(function(name) {
+    if (orderedNames.indexOf(name) === -1) orderedNames.push(name);
+  });
+
+  listEl.innerHTML = orderedNames.map(function(name) {
+    var subj = subjects.find(function(s) { return s.name === name; });
+    var color = subj ? subj.color : '#818cf8';
+    var score = rec.scores[name];
+    var weight = (rec.weights && rec.weights[name] !== undefined) ? rec.weights[name] : 1;
+    var escapedName = name.replace(/"/g, '&quot;');
+    return '<div data-edit-subject="' + escapedName + '"' +
+      ' style="display:flex;align-items:center;gap:8px;' +
+      'background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:8px;padding:6px 10px;">' +
+      '<span style="color:' + color + ';font-size:10px;">&#9679;</span>' +
+      '<input type="text" data-edit-name="' + escapedName + '"' +
+        ' value="' + escapedName + '"' +
+        ' style="flex:1;background:rgba(255,255,255,0.08);border:1px solid var(--border);' +
+          'border-radius:8px;color:var(--text);padding:5px 8px;font-size:13px;' +
+          'outline:none;font-family:inherit;transition:border-color .2s,box-shadow .2s;"' +
+        ' onfocus="this.style.borderColor=\'var(--accent)\';this.style.boxShadow=\'0 0 0 3px var(--accent-dim)\'"' +
+        ' onblur="this.style.borderColor=\'var(--border)\';this.style.boxShadow=\'none\'"' +
+      ' />' +
+      '<input type="number" min="0" data-edit-score="' + escapedName + '"' +
+        ' value="' + score + '"' +
+        ' style="width:72px;background:rgba(255,255,255,0.08);border:1px solid var(--border);' +
+          'border-radius:8px;color:var(--text);padding:5px 8px;font-size:12px;font-weight:600;' +
+          'outline:none;font-family:inherit;transition:border-color .2s,box-shadow .2s;"' +
+        ' onfocus="this.style.borderColor=\'var(--accent)\';this.style.boxShadow=\'0 0 0 3px var(--accent-dim)\'"' +
+        ' onblur="this.style.borderColor=\'var(--border)\';this.style.boxShadow=\'none\'"' +
+      ' />' +
+      '<input type="number" min="0" step="0.1" data-edit-weight="' + escapedName + '"' +
+        ' value="' + weight + '"' +
+        ' style="width:56px;background:rgba(255,255,255,0.08);border:1px solid var(--border);' +
+          'border-radius:8px;color:var(--text);padding:5px 8px;font-size:12px;' +
+          'outline:none;font-family:inherit;transition:border-color .2s,box-shadow .2s;"' +
+        ' onfocus="this.style.borderColor=\'var(--accent)\';this.style.boxShadow=\'0 0 0 3px var(--accent-dim)\'"' +
+        ' onblur="this.style.borderColor=\'var(--border)\';this.style.boxShadow=\'none\'"' +
+      ' />' +
+      '<button onclick="removeEditSubject(this)"' +
+        ' style="background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:14px;padding:2px 4px;flex-shrink:0;transition:color .15s;"' +
+        ' onmouseover="this.style.color=\'var(--danger)\'" onmouseout="this.style.color=\'var(--text-muted)\'"' +
+        ' title="' + t('remove_subject') + '">&times;</button>' +
+      '</div>';
+  }).join('');
+
+  openModal('editModal');
+  // 聚焦考试名称输入框
+  setTimeout(function() { document.getElementById('editExamName').focus(); }, 120);
+}
+
+/** 移除编辑弹窗中的一行科目 */
+function removeEditSubject(btn) {
+  if (!confirm(t('confirm_remove_subj'))) return;
+  var row = btn.parentElement;
+  row.remove();
+}
+
+/** 在编辑弹窗中添加一行新的空科目 */
+function addEditSubject() {
+  var listEl = document.getElementById('editSubjectScoreList');
+  var newRow = document.createElement('div');
+  newRow.setAttribute('data-edit-subject', '__new__');
+  newRow.style.cssText = 'display:flex;align-items:center;gap:8px;background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:8px;padding:6px 10px;';
+  newRow.innerHTML =
+    '<span style="color:#818cf8;font-size:10px;">&#9679;</span>' +
+    '<input type="text" data-edit-name="__new__"' +
+      ' style="flex:1;background:rgba(255,255,255,0.08);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:5px 8px;font-size:13px;outline:none;font-family:inherit;transition:border-color .2s,box-shadow .2s;"' +
+      ' onfocus="this.style.borderColor=\'var(--accent)\';this.style.boxShadow=\'0 0 0 3px var(--accent-dim)\'"' +
+      ' onblur="this.style.borderColor=\'var(--border)\';this.style.boxShadow=\'none\'"' +
+      ' placeholder="' + t('subject_name_ph') + '" />' +
+    '<input type="number" min="0" data-edit-score="__new__"' +
+      ' style="width:72px;background:rgba(255,255,255,0.08);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:5px 8px;font-size:12px;font-weight:600;outline:none;font-family:inherit;transition:border-color .2s,box-shadow .2s;"' +
+      ' onfocus="this.style.borderColor=\'var(--accent)\';this.style.boxShadow=\'0 0 0 3px var(--accent-dim)\'"' +
+      ' onblur="this.style.borderColor=\'var(--border)\';this.style.boxShadow=\'none\'"' +
+    ' />' +
+    '<input type="number" min="0" step="0.1" data-edit-weight="__new__"' +
+      ' style="width:56px;background:rgba(255,255,255,0.08);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:5px 8px;font-size:12px;outline:none;font-family:inherit;transition:border-color .2s,box-shadow .2s;"' +
+      ' onfocus="this.style.borderColor=\'var(--accent)\';this.style.boxShadow=\'0 0 0 3px var(--accent-dim)\'"' +
+      ' onblur="this.style.borderColor=\'var(--border)\';this.style.boxShadow=\'none\'"' +
+      ' placeholder="' + t('weight_ph') + '" />' +
+    '<button onclick="removeEditSubject(this)"' +
+      ' style="background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:14px;padding:2px 4px;flex-shrink:0;transition:color .15s;"' +
+      ' onmouseover="this.style.color=\'var(--danger)\'" onmouseout="this.style.color=\'var(--text-muted)\'"' +
+      ' title="' + t('remove_subject') + '">&times;</button>';
+  listEl.appendChild(newRow);
+  // 聚焦新科目名输入框
+  newRow.querySelector('[data-edit-name]').focus();
+}
+
+/**
+ * 保存编辑弹窗中的修改：
+ * 1. 校验考试名称、科目名称（非空、不重复）、分数
+ * 2. 构建科目名映射（oldName → newName）
+ * 3. 全局重命名：更新 subjects 数组 & 所有 scoreRecords 的 scores key
+ * 4. 同步 subjects（去重、补缺、清余）
+ * 5. save() → 刷新视图 → toast
+ */
+function saveEdit() {
+  if (editingIndex < 0 || editingIndex >= scoreRecords.length) return;
+
+  var errEl = document.getElementById('editErr');
+  var examName = document.getElementById('editExamName').value.trim();
+  var examDate = document.getElementById('editExamDate').value || today();
+
+  // 校验考试名称
+  if (!examName) {
+    errEl.textContent = t('err_exam_name');
+    errEl.classList.remove('hidden');
+    return;
+  }
+
+  // 读取每一行的旧科目名（data-edit-subject）、新科目名（data-edit-name）、分数（data-edit-score）
+  var rows = document.querySelectorAll('#editSubjectScoreList [data-edit-subject]');
+  var nameMap = {};   // oldName → newName（仅包含被修改的科目）
+  var newScores = {}; // 编辑记录的新 scores 对象
+  var newWeights = {}; // 编辑记录的新 weights 对象
+  var newNameList = [];
+  var hasError = false;
+
+  for (var i = 0; i < rows.length; i++) {
+    var row = rows[i];
+    var oldName = row.getAttribute('data-edit-subject');
+    var nameInput = row.querySelector('[data-edit-name]');
+    var newName = nameInput ? nameInput.value.trim() : oldName;
+    var scoreInput = row.querySelector('[data-edit-score]');
+    var scoreRaw = scoreInput ? scoreInput.value.trim() : '';
+    var weightInput = row.querySelector('[data-edit-weight]');
+    var weightRaw = weightInput ? weightInput.value.trim() : '';
+
+    // 新增的科目行标记为 __new__，提示文案不含旧名
+    var isNewSubject = (oldName === '__new__');
+
+    // 校验：科目名不能为空
+    if (!newName) {
+      errEl.textContent = isNewSubject ? t('err_subj_name') : '"' + oldName + '" — ' + t('err_subj_name');
+      errEl.classList.remove('hidden');
+      if (nameInput) nameInput.focus();
+      hasError = true;
+      break;
+    }
+
+    // 校验：科目名不能在本编辑表单内重复
+    if (newNameList.indexOf(newName) !== -1) {
+      errEl.textContent = '"' + newName + '" ' + t('err_subj_dup_edit');
+      errEl.classList.remove('hidden');
+      if (nameInput) nameInput.focus();
+      hasError = true;
+      break;
+    }
+
+    // 校验：分数必须有效
+    if (scoreRaw === '' || isNaN(Number(scoreRaw)) || Number(scoreRaw) < 0) {
+      errEl.textContent = '"' + newName + '" — ' + t('err_score');
+      errEl.classList.remove('hidden');
+      if (scoreInput) scoreInput.focus();
+      hasError = true;
+      break;
+    }
+
+    // 校验：权重必须 > 0（空则默认 1）
+    var weight = (weightRaw === '') ? 1 : Number(weightRaw);
+    if (weightRaw !== '' && (isNaN(weight) || weight <= 0)) {
+      errEl.textContent = '"' + newName + '" — ' + t('err_weight');
+      errEl.classList.remove('hidden');
+      if (weightInput) weightInput.focus();
+      hasError = true;
+      break;
+    }
+
+    // 记录映射（仅当新旧不同且不是新增科目时才加入映射，避免无意义的全局替换）
+    if (!isNewSubject && newName !== oldName) {
+      nameMap[oldName] = newName;
+    }
+    newScores[newName] = Number(scoreRaw);
+    newWeights[newName] = weight;
+    newNameList.push(newName);
+  }
+  if (hasError) return;
+
+  // 至少保留一个科目
+  if (Object.keys(newScores).length === 0) {
+    errEl.textContent = t('err_no_subject');
+    errEl.classList.remove('hidden');
+    return;
+  }
+  errEl.classList.add('hidden');
+
+  // ——— 全局重命名：更新所有 scoreRecords 的 scores 和 weights key ———
+  // 对于非当前编辑的记录，仅做 key 映射（分数值/权重值不变）
+  scoreRecords.forEach(function(rec, idx) {
+    if (idx === editingIndex) return;  // 编辑记录稍后单独处理
+    var updatedScores = {};
+    var updatedWeights = null;
+    var changed = false;
+    if (rec.weights) updatedWeights = {};
+    Object.keys(rec.scores).forEach(function(k) {
+      var mappedKey = nameMap[k] !== undefined ? nameMap[k] : k;
+      if (mappedKey !== k) changed = true;
+      updatedScores[mappedKey] = rec.scores[k];
+      if (updatedWeights) {
+        updatedWeights[mappedKey] = (rec.weights[k] !== undefined) ? rec.weights[k] : 1;
+      }
+    });
+    if (changed) {
+      rec.scores = updatedScores;
+      if (updatedWeights) rec.weights = updatedWeights;
+    }
+  });
+
+  // ——— 更新当前编辑记录 ———
+  scoreRecords[editingIndex].exam = examName;
+  scoreRecords[editingIndex].date = examDate;
+  scoreRecords[editingIndex].scores = newScores;
+  scoreRecords[editingIndex].weights = newWeights;
+
+  // ——— 更新全局 subjects 数组：重命名 ———
+  subjects.forEach(function(s) {
+    if (nameMap[s.name] !== undefined) {
+      s.name = nameMap[s.name];
+    }
+  });
+
+  // ——— 同步 subjects：去重 + 补缺 + 清余 ———
+  // 去重（重命名可能导致两个 subjects 条目同名）
+  var deduped = [];
+  var seenNames = {};
+  subjects.forEach(function(s) {
+    if (!seenNames[s.name]) {
+      seenNames[s.name] = true;
+      deduped.push(s);
+    }
+  });
+  subjects = deduped;
+
+  // 补缺：任何在记录中出现但 subjects 中不存在的科目，自动添加
+  var used = {};
+  scoreRecords.forEach(function(r) {
+    Object.keys(r.scores).forEach(function(s) { used[s] = true; });
+  });
+  Object.keys(used).forEach(function(sname) {
+    if (!subjects.some(function(s) { return s.name === sname; })) {
+      subjects.push({ name: sname, color: assignColor(subjects) });
+    }
+  });
+
+  // 清余：删除 subjects 中不再被任何记录引用的科目
+  subjects = subjects.filter(function(s) { return used[s.name]; });
+
+  save();
+  closeModal('editModal');
+  renderRecordList();
+  renderCharts();
+  showValidation(t('record_updated'));
+}
+
+// ====== 考试记录列表 ======
+function renderRecordList() {
+  var el = document.getElementById('recordList');
+  if (scoreRecords.length === 0) {
+    el.innerHTML = '<p style="color:var(--text-dim);font-size:12px;text-align:center;padding:20px 0;line-height:1.8;">' +
+      t('records_empty') + '</p>';
+    return;
+  }
+  var rows = scoreRecords.map(function(r, i) {
+    var isSelected = i === selectedExamIdx;
+    var borderColor = isSelected ? 'var(--accent-border-strong)' : 'var(--border)';
+    var bgColor = isSelected ? 'var(--accent-bg)' : 'var(--surface-3)';
+
+    var scoreItems = subjects
+      .filter(function(s) { return r.scores[s.name] !== undefined; })
+      .map(function(s) {
+        var w = (r.weights && r.weights[s.name] !== undefined) ? r.weights[s.name] : 1;
+        var weightStr = (w !== 1) ? ' \u00d7' + w : '';
+        return '<span style="display:inline-flex;align-items:center;gap:3px;margin-right:12px;">' +
+          '<span style="color:' + s.color + ';font-size:9px;">&#9679;</span>' +
+          '<span style="font-size:11px;color:var(--text-muted);">' + s.name + '</span>' +
+          '<span style="font-size:12px;color:' + s.color + ';font-weight:600;">' + r.scores[s.name] + weightStr + '</span>' +
+          '</span>';
+      }).join('');
+
+    return '<div style="display:flex;align-items:center;gap:14px;' +
+      'background:' + bgColor + ';border:1px solid ' + borderColor + ';border-radius:11px;' +
+      'padding:12px 16px;cursor:pointer;transition:border-color .15s,background .15s;"' +
+      ' onclick="selectExam(' + i + ')"' +
+      ' onmouseover="if(' + i + '!==' + selectedExamIdx + ')this.style.borderColor=\'var(--border-hover)\'"' +
+      ' onmouseout="if(' + i + '!==' + selectedExamIdx + ')this.style.borderColor=\'' + borderColor + '\'">' +
+      '<div style="flex:1;min-width:0;">' +
+        '<div style="display:flex;align-items:baseline;gap:8px;margin-bottom:6px;">' +
+          '<span style="font-size:14px;font-weight:600;color:' + (isSelected ? 'var(--accent-2)' : 'var(--accent-text)') + ';">' + r.exam + '</span>' +
+          '<span style="font-size:11px;color:var(--text-muted);">' + r.date + '</span>' +
+        '</div>' +
+        '<div style="line-height:2;">' + scoreItems + '</div>' +
+      '</div>' +
+      '<button onclick="event.stopPropagation();editRecord(' + i + ')"' +
+        ' style="background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:12px;flex-shrink:0;padding:4px;"' +
+        ' onmouseover="this.style.color=\'var(--accent-2)\'" onmouseout="this.style.color=\'var(--text-muted)\'">' +
+        '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">' +
+        '<path stroke-linecap="round" stroke-linejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg>' +
+      '</button>' +
+      '<button onclick="event.stopPropagation();deleteRecord(' + i + ')"' +
+        ' style="background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:12px;flex-shrink:0;padding:4px;"' +
+        ' onmouseover="this.style.color=\'var(--danger)\'" onmouseout="this.style.color=\'var(--text-muted)\'">' +
+        '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">' +
+        '<polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>' +
+      '</button>' +
+      '</div>';
+  });
+  el.innerHTML = '<div style="display:flex;flex-direction:column;gap:8px;">' + rows.join('') + '</div>';
+}
+
+// ====== 雷达图 ======
+function calculateContributionRates(rec, subjectNames) {
+  var total = subjectNames.reduce(function(sum, name) {
+    return sum + (rec.scores[name] || 0);
+  }, 0);
+  var avg = subjectNames.length > 0 ? total / subjectNames.length : 0;
+  return subjectNames.map(function(name) {
+    var score = rec.scores[name] || 0;
+    if (total === 0) return '+0.00';
+    var diff = (score - avg) / total;
+    var s = diff.toFixed(2);
+    return diff >= 0 ? '+' + s : s;
+  });
+}
+
+function selectExam(idx) {
+  selectedExamIdx = idx;
+  renderRecordList();
+  showExamOnRadar(idx);
+}
+
+function showExamOnRadar(idx) {
+  if (typeof Chart === 'undefined') return;
+  var rec = scoreRecords[idx];
+  if (!rec) return;
+
+  if (radarChart) { radarChart.destroy(); radarChart = null; }
+
+  var recSubjects = subjects.filter(function(s) { return rec.scores[s.name] !== undefined; });
+  var rCanvas = document.getElementById('radarChart');
+  var rEmpty = document.getElementById('radarEmpty');
+
+  if (recSubjects.length === 0) {
+    rCanvas.style.display = 'none';
+    rEmpty.style.display = 'flex';
+    return;
+  }
+
+  rCanvas.style.display = '';
+  rEmpty.style.display = 'none';
+
+  document.getElementById('radarTitle').innerHTML =
+    t('radar_title') + ' <span style="font-size:11px;color:var(--text-muted);font-weight:400;">' + rec.exam + ' / ' + rec.date + '</span>';
+  document.getElementById('clearRadarBtn').classList.remove('hidden');
+
+  var realData = recSubjects.map(function(s) { return rec.scores[s.name]; });
+  var zeroData = recSubjects.map(function() { return 0; });
+  // 固定刻度上限，避免动画时网格线跳动
+  var maxScore = Math.max.apply(null, realData);
+  var scaleMax = Math.ceil(maxScore / 10) * 10;
+  if (scaleMax < maxScore) scaleMax = maxScore;
+
+  var rates = calculateContributionRates(rec, recSubjects.map(function(s) { return s.name; }));
+
+  radarChart = new Chart(rCanvas.getContext('2d'), {
+    type: 'radar',
+    data: {
+      labels: recSubjects.map(function(s) { return s.name; }),
+      datasets: [{
+        label: rec.exam,
+        data: zeroData,
+        backgroundColor: 'rgba(129,140,248,0.12)',
+        borderColor: '#818cf8',
+        borderWidth: 2,
+        pointBackgroundColor: recSubjects.map(function(s) { return s.color; }),
+        pointBorderColor: '#fff',
+        pointBorderWidth: 1,
+        pointRadius: 5,
+        pointHoverRadius: 7
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: true,
+      animation: {
+        duration: 1400,
+        easing: 'easeOutQuart'
+      },
+      scales: {
+        r: {
+          beginAtZero: true,
+          max: scaleMax,
+          ticks: { color: currentTheme === 'light' ? 'rgba(30,30,46,0.6)' : 'rgba(255,255,255,0.5)', backdropColor: 'transparent', font: { size: 9 } },
+          grid: { color: currentTheme === 'light' ? 'rgba(0,0,0,0.08)' : 'rgba(255,255,255,0.1)' },
+          angleLines: { color: currentTheme === 'light' ? 'rgba(0,0,0,0.08)' : 'rgba(255,255,255,0.1)' },
+          pointLabels: {
+            color: recSubjects.map(function(s) { return s.color; }),
+            font: { size: 11, weight: '600' },
+            callback: function(label, index) {
+              var rate = rates[index];
+              if (rate === null || rate === undefined) return label;
+              return [label, rate];
+            }
+          }
+        }
+      },
+      plugins: {
+        legend: { display: false }
+      }
+    }
+  });
+
+  // 等浏览器画出零值状态后，再平滑过渡到真实分数
+  requestAnimationFrame(function() {
+    requestAnimationFrame(function() {
+      if (!radarChart) return;
+      radarChart.data.datasets[0].data = realData;
+      radarChart.update();
+    });
+  });
+}
+
+function clearRadarSelection() {
+  selectedExamIdx = -1;
+  if (radarChart) { radarChart.destroy(); radarChart = null; }
+  document.getElementById('radarChart').style.display = 'none';
+  document.getElementById('radarEmpty').style.display = 'flex';
+  document.getElementById('radarTitle').textContent = t('radar_title');
+  document.getElementById('clearRadarBtn').classList.add('hidden');
+  renderRecordList();
+}
+
+// ====== 折线图 ======
+function renderCharts() {
+  if (typeof Chart === 'undefined') return;
+
+  if (radarChart) { radarChart.destroy(); radarChart = null; }
+  var rCanvas = document.getElementById('radarChart');
+  var rEmpty = document.getElementById('radarEmpty');
+  rCanvas.style.display = 'none';
+  rEmpty.style.display = 'flex';
+  if (selectedExamIdx >= 0 && selectedExamIdx < scoreRecords.length) {
+    showExamOnRadar(selectedExamIdx);
+  } else {
+    document.getElementById('radarTitle').textContent = t('radar_title');
+    document.getElementById('clearRadarBtn').classList.add('hidden');
+  }
+
+  if (lineChart) { lineChart.destroy(); lineChart = null; }
+  var lCanvas = document.getElementById('lineChart');
+  var lEmpty = document.getElementById('lineEmpty');
+
+  if (subjects.length === 0 || scoreRecords.length === 0) {
+    lCanvas.style.display = 'none';
+    lEmpty.style.display = 'flex';
+    return;
+  }
+
+  lCanvas.style.display = '';
+  lEmpty.style.display = 'none';
+  lineChart = new Chart(lCanvas.getContext('2d'), {
+    type: 'line',
+    data: {
+      labels: scoreRecords.map(function(r) { return [r.exam, r.date]; }),
+      datasets: subjects.map(function(s) {
+        return {
+          label: s.name,
+          data: scoreRecords.map(function(r) {
+            return r.scores[s.name] !== undefined ? r.scores[s.name] : null;
+          }),
+          borderColor: s.color,
+          backgroundColor: s.color + '22',
+          borderWidth: 2,
+          pointRadius: 5,
+          pointBackgroundColor: s.color,
+          tension: 0.3,
+          fill: false,
+          spanGaps: true
+        };
+      })
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: true,
+      scales: {
+        x: {
+          ticks: { color: currentTheme === 'light' ? 'rgba(30,30,46,0.65)' : 'rgba(255,255,255,0.65)', font: { size: 11 } },
+          grid: { color: currentTheme === 'light' ? 'rgba(0,0,0,0.08)' : 'rgba(255,255,255,0.09)' }
+        },
+        y: {
+          beginAtZero: true,
+          ticks: { color: currentTheme === 'light' ? 'rgba(30,30,46,0.6)' : 'rgba(255,255,255,0.6)', font: { size: 11 } },
+          grid: { color: currentTheme === 'light' ? 'rgba(0,0,0,0.08)' : 'rgba(255,255,255,0.09)' }
+        }
+      },
+      plugins: {
+        legend: { labels: { color: currentTheme === 'light' ? '#1e1e2e' : '#e2e8f0', font: { size: 11 }, usePointStyle: true } },
+        tooltip: { mode: 'index', intersect: false }
+      }
+    }
+  });
+}
+
+// ====== 工具 ======
+function showValidation(msg) {
+  var bar = document.getElementById('validationBar');
+  bar.textContent = msg;
+  bar.classList.remove('hidden');
+  clearTimeout(bar._t);
+  bar._t = setTimeout(function() { bar.classList.add('hidden'); }, 3500);
+}
+
+// ====== 导出 Excel ======
+function exportExcel() {
+  if (scoreRecords.length === 0) {
+    showValidation(t('no_records_export'));
+    return;
+  }
+
+  if (typeof XLSX === 'undefined') {
+    showValidation(t('excel_loading'));
+    return;
+  }
+
+  // 按日期排序
+  var records = scoreRecords.slice().sort(function(a, b) {
+    return a.date.localeCompare(b.date);
+  });
+
+  // 收集所有科目（以 subjects 数组为主，再补充记录中可能遗漏的）
+  var allSubjects = [];
+  var seen = {};
+  subjects.forEach(function(s) {
+    if (!seen[s.name]) { seen[s.name] = true; allSubjects.push(s.name); }
+  });
+  records.forEach(function(rec) {
+    Object.keys(rec.scores).forEach(function(sname) {
+      if (!seen[sname]) { seen[sname] = true; allSubjects.push(sname); }
+    });
+  });
+
+  // 构建矩阵二维数组
+  // 第 1 行：A1 空白，B1+ = 考试名称（含日期，用空格隔开）
+  var headerRow = [''];
+  records.forEach(function(rec) {
+    headerRow.push(rec.exam + ' ' + rec.date);
+  });
+
+  var aoa = [headerRow];
+
+  // 每个科目一行：A 列 = 科目名称，B+ 列 = 对应分数（无则留空）
+  allSubjects.forEach(function(sname) {
+    var row = [sname];
+    records.forEach(function(rec) {
+      if (rec.scores[sname] !== undefined) {
+        var w = (rec.weights && rec.weights[sname] !== undefined) ? rec.weights[sname] : 1;
+        if (w !== 1) {
+          row.push(rec.scores[sname] + ' \u00d7' + w);
+        } else {
+          row.push(rec.scores[sname]);
+        }
+      } else {
+        row.push('');
+      }
+    });
+    aoa.push(row);
+  });
+
+  // 创建工作表
+  var ws = XLSX.utils.aoa_to_sheet(aoa);
+
+  // 所有单元格居中对齐
+  var wsRange = XLSX.utils.decode_range(ws['!ref']);
+  for (var R = wsRange.s.r; R <= wsRange.e.r; ++R) {
+    for (var C = wsRange.s.c; C <= wsRange.e.c; ++C) {
+      var cellRef = XLSX.utils.encode_cell({ r: R, c: C });
+      var cell = ws[cellRef];
+      if (cell) {
+        cell.s = cell.s || {};
+        cell.s.alignment = { horizontal: 'center', vertical: 'center' };
+      }
+    }
+  }
+
+  // 列宽：A 列宽一点放科目名，其余列放考试名
+  var colWidths = [{ wch: 12 }];
+  records.forEach(function() { colWidths.push({ wch: 18 }); });
+  ws['!cols'] = colWidths;
+
+  // 创建工作簿
+  var wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, t('excel_sheet'));
+
+  var namePart = isGuest ? t('guest_label') : currentUser;
+  var fileName = namePart + '_' + t('file_scores') + '_' + today() + '.xlsx';
+  XLSX.writeFile(wb, fileName);
+}
+
+// ====== 成绩分享卡 ======
+var shareChart = null;
+
+function openShareCard(rec) {
+  // 游客不能分享，跳回登录页
+  if (isGuest) {
+    document.getElementById('appPage').style.display = 'none';
+    document.getElementById('loginPage').style.display = 'flex';
+    // 在登录框顶部显示提示
+    var errEl = document.getElementById('loginErr');
+    errEl.textContent = t('share_login_required');
+    errEl.classList.remove('hidden');
+    setTimeout(function() { document.getElementById('loginUsername').focus(); }, 100);
+    return;
+  }
+
+  // 优先使用传入的 rec，其次是当前选中记录，最后 fallback 到最新记录
+  var record = rec || (selectedExamIdx >= 0 && selectedExamIdx < scoreRecords.length ? scoreRecords[selectedExamIdx] : null) || scoreRecords[scoreRecords.length - 1];
+  if (!record) {
+    document.getElementById('shareEmpty').style.display = 'block';
+    document.getElementById('shareContent').style.display = 'none';
+    openModal('shareModal');
+    return;
+  }
+
+  var recSubjects = subjects.filter(function(s) { return record.scores[s.name] !== undefined; });
+
+  if (recSubjects.length === 0) {
+    document.getElementById('shareEmpty').style.display = 'block';
+    document.getElementById('shareContent').style.display = 'none';
+    openModal('shareModal');
+    return;
+  }
+
+  document.getElementById('shareEmpty').style.display = 'none';
+  document.getElementById('shareContent').style.display = 'block';
+
+  var canvas = document.getElementById('shareCanvas');
+  var ctx = canvas.getContext('2d');
+
+  if (shareChart) { shareChart.destroy(); shareChart = null; }
+
+  var realData = recSubjects.map(function(s) { return record.scores[s.name]; });
+  var maxScore = Math.max.apply(null, realData);
+  var scaleMax = Math.ceil(maxScore / 10) * 10;
+  if (scaleMax < maxScore) scaleMax = maxScore;
+
+  var shareRates = calculateContributionRates(record, recSubjects.map(function(s) { return s.name; }));
+
+  var savedAvatar = localStorage.getItem('sai_avatar_' + currentUser);
+
+  // 内联插件：Chart.js 画完雷达图后自动调用，不会被覆盖
+  var overlayPlugin = {
+    id: 'shareOverlay',
+    beforeDraw: function(chart) {
+      // 分享卡背景：在绘制雷达图之前填满整个画布，
+      // 使预览与下载的 PNG 都带有统一且更浅的背景色（而非透明）。
+      var bgCtx = chart.ctx;
+      bgCtx.fillStyle = '#2a2a3e';
+      bgCtx.fillRect(0, 0, chart.width, chart.height);
+    },
+    afterDraw: function(chart) {
+      var c = chart.ctx;
+      var w = chart.width;
+      var h = chart.height;
+
+      // 顶部考试信息
+      c.fillStyle = '#c4b5fd';
+      c.font = '600 15px -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", sans-serif';
+      c.textAlign = 'center';
+      c.textBaseline = 'top';
+      c.fillText(record.exam + '  ·  ' + record.date, w / 2, 8);
+
+      // 头像位置：右下角
+      var ax = w - 62;
+      var ay = h - 58;
+      var ar = 34;
+
+      // 用户名（头像上方，粗体放大）
+      c.fillStyle = '#e2e8f0';
+      c.font = '700 17px -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", sans-serif';
+      c.textAlign = 'center';
+      c.textBaseline = 'bottom';
+      c.fillText(currentUser, ax, ay - ar - 8);
+
+      if (window._shareAvatarImg) {
+        // 自定义头像图片
+        c.beginPath();
+        c.arc(ax, ay, ar, 0, Math.PI * 2);
+        c.shadowColor = 'rgba(129,140,248,0.45)';
+        c.shadowBlur = 18;
+        c.fillStyle = '#1a1a2e';
+        c.fill();
+        c.shadowBlur = 0;
+
+        c.save();
+        c.beginPath();
+        c.arc(ax, ay, ar, 0, Math.PI * 2);
+        c.clip();
+        c.drawImage(window._shareAvatarImg, ax - ar, ay - ar, ar * 2, ar * 2);
+        c.restore();
+
+        c.beginPath();
+        c.arc(ax, ay, ar, 0, Math.PI * 2);
+        c.strokeStyle = 'rgba(255,255,255,0.2)';
+        c.lineWidth = 1.5;
+        c.stroke();
+      } else {
+        // 默认渐变头像 + 首字母
+        var grad = c.createLinearGradient(ax - ar, ay - ar, ax + ar, ay + ar);
+        grad.addColorStop(0, '#818cf8');
+        grad.addColorStop(1, '#a78bfa');
+
+        c.beginPath();
+        c.arc(ax, ay, ar, 0, Math.PI * 2);
+        c.fillStyle = grad;
+        c.shadowColor = 'rgba(129,140,248,0.45)';
+        c.shadowBlur = 18;
+        c.fill();
+        c.shadowBlur = 0;
+
+        c.strokeStyle = 'rgba(255,255,255,0.2)';
+        c.lineWidth = 1.5;
+        c.stroke();
+
+        c.fillStyle = '#fff';
+        c.font = '700 26px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+        c.textAlign = 'center';
+        c.textBaseline = 'middle';
+        c.fillText(currentUser.charAt(0).toUpperCase(), ax, ay + 1);
+      }
+
+      // 生成预览图
+      document.getElementById('sharePreview').src = canvas.toDataURL('image/png');
+    }
+  };
+
+  // 如果有自定义头像，先预加载图片，再创建图表（确保 afterDraw 时图片已就绪）
+  var createChart = function() {
+    shareChart = new Chart(ctx, {
+      type: 'radar',
+      data: {
+        labels: recSubjects.map(function(s) { return s.name; }),
+        datasets: [{
+          label: record.exam,
+          data: realData,
+          backgroundColor: 'rgba(129,140,248,0.12)',
+          borderColor: '#818cf8',
+          borderWidth: 2,
+          pointBackgroundColor: recSubjects.map(function(s) { return s.color; }),
+          pointBorderColor: '#fff',
+          pointBorderWidth: 1,
+          pointRadius: 5,
+          pointHoverRadius: 5
+        }]
+      },
+      options: {
+        responsive: false,
+        animation: false,
+        layout: {
+          padding: { top: 36, right: 105, bottom: 75, left: 15 }
+        },
+        scales: {
+          r: {
+            beginAtZero: true,
+            max: scaleMax,
+            ticks: { color: 'rgba(255,255,255,0.5)', backdropColor: 'transparent', font: { size: 9 } },
+            grid: { color: 'rgba(255,255,255,0.1)' },
+            angleLines: { color: 'rgba(255,255,255,0.1)' },
+            pointLabels: {
+              color: recSubjects.map(function(s) { return s.color; }),
+              font: { size: 12, weight: '600' },
+              callback: function(label, index) {
+                var rate = shareRates[index];
+                if (rate === null || rate === undefined) return label;
+                return [label, rate];
+              }
+            }
+          }
+        },
+        plugins: {
+          legend: { display: false },
+          tooltip: { enabled: false }
+        }
+      },
+      plugins: [overlayPlugin]  // 注册内联插件
+    });
+
+    openModal('shareModal');
+  };
+
+  if (savedAvatar) {
+    window._shareAvatarImg = null;
+    var img = new Image();
+    img.onload = function() {
+      window._shareAvatarImg = img;
+      createChart();
+    };
+    img.onerror = function() {
+      window._shareAvatarImg = null;
+      createChart();
+    };
+    img.src = savedAvatar;
+  } else {
+    window._shareAvatarImg = null;
+    createChart();
+  }
+}
+
+function downloadShareCard() {
+  var img = document.getElementById('sharePreview');
+  if (!img.src) return;
+  var link = document.createElement('a');
+  link.download = t('share_file_prefix') + '_' + currentUser + '.png';
+  link.href = img.src;
+  link.click();
+}
+
+document.addEventListener('DOMContentLoaded', init);
+</script>
+</body>
+</html>
