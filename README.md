@@ -1,7 +1,9 @@
 # Score-Loader
-excel sucks
+excel sucks.
+
 I have to load it one by one everytime after exam.
-but i'm lazy
+
+but i'm lazy.
 
 
 
@@ -11,9 +13,8 @@ Introducing Score Loader
 
 2: One-click download: Charts and structured Excel files are saved directly. Want to view the data? Just click once; no more manual processing required.
 
-
 can't get in?
-there's a python version, but much more simple.
 
+there's a python version, but much more simple.
 
 ty Work Buddy for building this app.
